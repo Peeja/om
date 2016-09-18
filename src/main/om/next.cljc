@@ -1898,7 +1898,7 @@
             (if-not #?(:clj  (identical? ::not-found cs)
                        :cljs (keyword-identical? ::not-found cs))
               cs
-              (if (keyword? k)
+              (if (or (keyword? k) (util/ident? k))
                 ;; TODO: more robust validation, might be bogus key
                 (let [cs (get-in indexes [:prop->classes k])]
                   (transduce (map #(get-in indexes [:class->components %]))
