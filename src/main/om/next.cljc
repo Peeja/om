@@ -13,6 +13,7 @@
             [om.transit :as transit]
             [om.util :as util]
             [clojure.zip :as zip]
+            [clojure.set :as set]
             [om.next.protocols :as p]
             [cljs.analyzer :as ana]
             [cljs.analyzer.api :as ana-api]
@@ -1894,16 +1895,11 @@
         #{k}
         (if-let [cs ((:ref->components extfs) indexes k)]
           cs
-          (let [cs (get-in indexes [:ref->components k] ::not-found)]
-            (if-not #?(:clj  (identical? ::not-found cs)
-                       :cljs (keyword-identical? ::not-found cs))
-              cs
-              (if (or (keyword? k) (util/ident? k))
-                ;; TODO: more robust validation, might be bogus key
-                (let [cs (get-in indexes [:prop->classes k])]
-                  (transduce (map #(get-in indexes [:class->components %]))
-                    (completing into) #{} cs))
-                #{}))))))))
+          (set/union
+           (get-in indexes [:ref->components k] #{})
+           (let [cs (get-in indexes [:prop->classes k])]
+             (transduce (map #(get-in indexes [:class->components %]))
+                        (completing into) #{} cs))))))))
 
 (defn indexer
   "Given a function (Component -> Ref), return an indexer."
