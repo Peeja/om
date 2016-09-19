@@ -18,6 +18,8 @@
                                org.clojure/tools.reader]]
                  [devcards                    "0.2.1-7"        :scope "test"
                   :exclusions [org.clojure/clojurescript]]
+                 [sablono "0.7.2" :scope "test"
+                  :exclusions [org.clojure/clojurescript]]
                  [com.cemerick/piggieback     "0.2.1"          :scope "test"
                   :exclusions [org.clojure/clojure
                                org.clojure/tools.nrepl

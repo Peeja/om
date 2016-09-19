@@ -8,7 +8,8 @@
             [om.devcards.autocomplete]
             [om.devcards.shared-fn-test]
             [om.next :as om :refer-macros [defui]]
-            [om.dom :as dom]))
+            [om.dom :as dom]
+            [sablono.core :as html :refer-macros [html]]))
 
 (enable-console-print!)
 (start-devcard-ui!)
@@ -448,3 +449,101 @@
   (dom-node
     (fn [_ node]
       (om/add-root! instrument-reconciler RootView node))))
+
+
+
+
+
+(defui ^:once PetListItem
+  static om/Ident
+  (ident [this {:keys [db/id]}]
+    [:pet/by-id id])
+  static om/IQuery
+  (query [this]
+    [:db/id :pet/name])
+  Object
+  (render [this]
+    (html
+     [:li {:on-click #((om/get-computed (om/props this) :on-click) this)}
+      (:pet/name (om/props this))])))
+
+(def pet-list-item (om/factory PetListItem))
+
+(defui ^:once PetDetails
+  static om/Ident
+  (ident [this {:keys [db/id]}]
+    [:pet/by-id id])
+  static om/IQuery
+  (query [this]
+    [:db/id :pet/name :pet/favorite-toy])
+  Object
+  (render [this]
+    (html
+     [:div
+      [:h1 (:pet/name (om/props this))]
+      [:p "Favorite toy: " (:pet/favorite-toy (om/props this))]])))
+
+(def pet-details (om/factory PetDetails))
+
+(defui ^:once PetsPage
+  static om/IQueryParams
+  (params [this]
+    {:selected-pet [:pet/by-id 0]})
+  static om/IQuery
+  (query [this]
+    [{[:app/current-user '_] [{:user/pets (om/get-query PetListItem)}]}
+     {'?selected-pet (om/get-query PetDetails)}])
+  Object
+  (render [this]
+    (js/console.debug (pr-str (om/props this)))
+    (let [orgs (get-in (om/props this) [:app/current-user :user/pets])
+          selected-pet-ident (:selected-pet (om/get-params this))
+          selected-pet (get (om/props this) selected-pet-ident)]
+      (html
+       [:div
+        [:div {:style {:display "flex"}}
+         [:div {:style {:width "300px"}}
+          [:ul
+           (for [org orgs]
+             (pet-list-item
+                (om/computed org
+                             {:on-click
+                              #(om/set-query! this
+                                              {:params
+                                               {:selected-pet (om/get-ident %)}})})))]]
+         [:div
+          (when selected-pet
+            (pet-details selected-pet))]]]))))
+
+(def pets-page (om/factory PetsPage))
+
+(defui ^:once Root
+  static om/IQuery
+  (query [this]
+    [{::route-data (om/get-query PetsPage)}])
+  Object
+  (render [this]
+    (pets-page (::route-data (om/props this)))))
+
+(def projects-app-state
+  (atom {:app/current-user
+         {:user/pets [[:pet/by-id 0]
+                      [:pet/by-id 1]]}
+         :pet/by-id {0 {:db/id 0
+                        :pet/name "Alfred"
+                        :pet/favorite-toy "Stuffed Bear"}
+                     1 {:db/id 1
+                        :pet/name "Jasmine"
+                        :pet/favorite-toy "Squeeky Toy"}}}))
+
+(def projects-reconciler
+  (om/reconciler
+   {:state projects-app-state
+    :parser (om/parser {:read (fn [{:keys [state query] :as env} key _]
+                                (let [st @state]
+                                  {:value (om/db->tree query st st)}))})}))
+
+(defcard test-query-setting
+  (dom-node
+   (fn [_ node]
+     (om/add-root! projects-reconciler Root node))))
