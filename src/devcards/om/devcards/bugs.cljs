@@ -2,7 +2,11 @@
   (:require [devcards.core :refer-macros [defcard deftest dom-node]]
             [cljs.test :refer-macros [is async]]
             [om.next :as om :refer-macros [defui]]
-            [om.dom :as dom]))
+            [om.dom :as dom]
+
+            [cljs.pprint :refer [pprint]]
+            [om.core :as old-om]
+            [clojure.zip :as zip]))
 
 (def init-data
   {:dashboard/posts
@@ -1026,3 +1030,94 @@
   (pprint/pprint @(om/get-indexer reconciler))
 
   )
+
+
+(defmulti demonstrate-read om/dispatch)
+
+(defmethod demonstrate-read :default
+  [{:keys [state query]} key _]
+  (let [st @state]
+    {:value (om/db->tree query (get st key) st)}))
+
+(defmethod demonstrate-read :page/demonstrate
+  [{:keys [parser query] :as env} key _]
+  {:value (parser env query)})
+
+(defui ^:once DemonstratePerson
+  static om/Ident
+  (ident [this {:keys [person/id]}]
+    [:person/by-id id])
+  static om/IQueryParams
+  (params [this]
+    {:prop :person/foo})
+  static om/IQuery
+  (query [this]
+    '[:person/id
+      :person/name
+      ?prop])
+  Object
+  (render [this]
+    (let [{:keys [:person/id :person/name :person/foo :person/bar]} (om/props this)]
+      (dom/div nil
+        (dom/h1 nil name)
+        (dom/p nil "Foo: " foo)
+        (dom/p nil "Bar: " bar)
+        (dom/button
+         #js {:onClick #(om/set-query!
+                         this
+                         {:params
+                          {:prop
+                           (case (:prop (om/get-params this))
+                             :person/foo :person/bar
+                             :person/bar :person/foo)}})}
+         "Switch")))))
+
+(def demonstrate-person (om/factory DemonstratePerson))
+
+(defui ^:once DemonstrateRoot
+  static om/IQuery
+  (query [this]
+    [{:app/route-data [{:route-data/person (om/get-query DemonstratePerson)}]}])
+  Object
+  (render [this]
+    (demonstrate-person (-> (om/props this) :app/route-data :route-data/person))))
+
+
+(defonce demonstrate-reconciler
+  (om/reconciler {:state {:app/route-data
+                          {:route-data/person {:person/id 5
+                                               :person/name "George"
+                                               :person/foo "Foo!"
+                                               :person/bar "Bar!"}}}
+                  :parser (om/parser {:read demonstrate-read})}))
+
+(defn index-component [indexes owner]
+  (reify
+    old-om/IRender
+    (render [_]
+      (dom/ul nil
+        (for [[cp qs] (:class-path->query indexes)]
+          (dom/li #js {:key (pr-str cp)}
+            (dom/code nil (pr-str cp))
+            (dom/ul nil
+              (for [q qs]
+                (dom/li #js {:key (pr-str (zip/root q))}
+                  (dom/code nil (pr-str (zip/root q))))))))))))
+
+(defcard demonstrate-issue
+  (dom-node
+   (fn [_ node]
+     (let [first-child (aget (.-childNodes node) 0)]
+       (when (= js/Node.TEXT_NODE (.-nodeType first-child))
+         (.remove first-child)))
+     (let [doc (.-ownerDocument node)
+           demonstrate-root (or (aget (.-childNodes node) 0)
+                                (let [div (.createElement doc "div")]
+                                  (.appendChild node div)
+                                  div))
+           indexer-root (or (aget (.-childNodes node) 1)
+                            (let [div (.createElement doc "div")]
+                              (.appendChild node div)
+                              div))]
+       (om/add-root! demonstrate-reconciler DemonstrateRoot demonstrate-root)
+       (old-om/root index-component (:indexes (om/get-indexer demonstrate-reconciler)) {:target indexer-root})))))
