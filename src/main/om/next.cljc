@@ -786,7 +786,7 @@
         qs (if (empty? qs) class-path-query-data qs)]
     (if-not (empty? qs)
       (let [q (first qs)
-            node (zip/node q)]
+            node (zip/root q)]
         (if-not (util/recursion? node)
           node
           (recur component class-path-query-data (pop data-path))))
